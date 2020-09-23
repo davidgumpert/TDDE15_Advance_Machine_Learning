@@ -79,14 +79,16 @@ print(HMM)
 ## Task 2
 *Simulate the HMM for 100 time steps*
 
-```{r}
+Using the simHMM(HMM, 100) to simulate a run with 100 time steps of the created HMM structure
+
+```{r, initialSim, echo=FALSE}
 hmm_sim <- simHMM(HMM, 100)
 print(hmm_sim)
 ```
 ## Task 3
 *Discard the hidden states from the sample obtained above. Use the remaining observations to compute the filtered and smoothed probability distributions for each of the 100 time points. Compute also the most probable path.*
 
-```{r}
+```{r, probDist}
 # Function returning the most probable state given a probability vector describing the probability distribution over the 10 states in a specific time step
 mostProbState <- function(prob_vect) {
   max_index <- which.max(prob_vect)
@@ -106,6 +108,12 @@ filtered_most_prob <- apply(X = filtered_dist_norm, MARGIN = 2, FUN = mostProbSt
 # Computing the most probable path with the viterbi algorithm
 most_prob_path <- viterbi(hmm = HMM, observation = hmm_sim$observation)
 
+print("Smooth distribution over 10 first time steps")
+print(smooth_dist[1:10,1:10])
+print("Filtered distribution over 10 first time steps")
+print(filtered_dist_norm[1:10,1:10])
+print("Most probable path")
+print(most_prob_path)
 ```
 ## Task 4
 *Compute the accuracy of the filtered and smoothed probability distributions, and of the most probable path. That is, compute the percentage of the true hidden states that are guessed by each method*
@@ -129,79 +137,104 @@ stateAcc <- function(pred_states, true_states) {
 
 # Smooth accuracy
 smooth_acc <- stateAcc(smooth_most_prob, hmm_sim$states)
+print(paste("Smooth acc: ", smooth_acc))
 
 # Filtered accuracy
 filtered_acc <- stateAcc(filtered_most_prob, hmm_sim$states)
+print(paste("Filtered acc: ", filtered_acc))
 
 # Mot probable path accuracy
 path_acc <- stateAcc(most_prob_path, hmm_sim$states)
+print(paste("Path acc: ", path_acc))
+
 ```
 ## Task 5
 *Repeat the previous exercise with different simulated samples. In general, the smoothed distributions should be more accurate than the filtered distributions. Why? In general, the smoothed distributions should be more accurate than the most probable paths, too. Why?*
 ```{r}
-# Function to calculate the Smooth, Filtered and Path accuracy given a HMM and a number of time steps. Also returns the probability distribution for both the Filtered and Smooth calculations. 
-simulationStepComputation <- function(hmm, time_steps) {
-    # Initializing the simulated HMM
-    HMM_simulation <- simHMM(hmm,time_steps)
-    
-    # Smooth (_new is added to the calculated variables to differ from the previous distribution and acc calculations made     in previous tasks).
-    smooth_dist_new <- posterior(HMM, HMM_simulation$observation)
-    smooth_most_prob_new <- apply(X = smooth_dist_new, MARGIN = 2, FUN = mostProbState)
-    smooth_acc_new <- stateAcc(smooth_most_prob_new, HMM_simulation$states)
+# Function to calculate the Smooth, Filtered and Path accuracy given a HMM, a number of time steps and a seed. Also returns the probability distribution for both the Filtered and Smooth calculations. Set time steps constent and alter seed or vice versa for useful insights.
+simulationStepComputation <- function(hmm, time_steps, seed) {
+  # Setting seed
+  if(!missing(seed)) {
+    set.seed(seed)
+  }
+  
+  # Initializing the simulated HMM
+  HMM_simulation <- simHMM(hmm,time_steps)
+  
+  # Smooth (_new is added to the calculated variables to differ from the previous task variables).
+  smooth_dist_new <- posterior(HMM, HMM_simulation$observation)
+  smooth_most_prob_new <- apply(X = smooth_dist_new, MARGIN = 2, FUN = mostProbState)
+  smooth_acc_new <- stateAcc(smooth_most_prob_new, HMM_simulation$states)
 
-    # Filtered
-    filtered_dist_new <- exp(forward(HMM, HMM_simulation$observation))
-    filtered_dist_norm_new <- apply(X = filtered_dist_new, MARGIN = 2, FUN = prop.table)
-    filtered_most_prob_new <- apply(X = filtered_dist_norm_new, MARGIN = 2, FUN = mostProbState)
-    filtered_acc_new <- stateAcc(filtered_most_prob_new, HMM_simulation$states)
+  # Filtered
+  filtered_dist_new <- exp(forward(HMM, HMM_simulation$observation))
+  filtered_dist_norm_new <- apply(X = filtered_dist_new, MARGIN = 2, FUN = prop.table)
+  filtered_most_prob_new <- apply(X = filtered_dist_norm_new, MARGIN = 2, FUN = mostProbState)
+  filtered_acc_new <- stateAcc(filtered_most_prob_new, HMM_simulation$states)
 
-    # Most probable path
-    most_prob_path_new <- viterbi(hmm = HMM, observation = HMM_simulation$observation)
-    path_acc_new <- stateAcc(most_prob_path_new, HMM_simulation$states)
-    
-    accuracy <- data.frame(Smooth = smooth_acc_new, Filtered = filtered_acc_new, Path = path_acc_new)
-    result <- list("accuracy" = accuracy,
-                "smooth_dist" = smooth_dist_new,
-                "filtered_dist" = filtered_dist_new)
-    return(result)
+  # Most probable path
+  most_prob_path_new <- viterbi(hmm = HMM, observation = HMM_simulation$observation)
+  path_acc_new <- stateAcc(most_prob_path_new, HMM_simulation$states)
+  
+  accuracy <- data.frame(Smooth = smooth_acc_new, Filtered = filtered_acc_new, Path = path_acc_new)
+  result <- list("accuracy" = accuracy,
+              "smooth_dist" = smooth_dist_new,
+              "filtered_dist" = filtered_dist_new)
+  return(result)
 }
 
 simmulated_samples = c(50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000)
+number_of_seeds = 10
 accs_df <- data.frame(Smooth=numeric(0), Filtered = numeric(0), Path = numeric(0))
+accs_df_2 <- data.frame(Smooth=numeric(0), Filtered = numeric(0), Path = numeric(0))
 
 for(i in 1:length(simmulated_samples)) {
   simulation_step <- simulationStepComputation(hmm = HMM, time_steps = simmulated_samples[i])
   accs_df <- rbind(accs_df, simulation_step$accuracy)
 }
 
+for(i in 1:number_of_seeds) {
+  simulation_step_2 <- simulationStepComputation(hmm = HMM, time_steps = 200, seed = i)
+  accs_df_2 <- rbind(accs_df_2, simulation_step_2$accuracy)
+}
+
 library(ggplot2)
 accs_df <- cbind(Time_steps = simmulated_samples, accs_df)
+accs_df_2 <- cbind(Seed = c(1:number_of_seeds), accs_df_2)
+
 ggplot(data = accs_df, mapping = aes(x=Time_steps)) +
   ylim(0, 1) +
   xlim(50, 1000) +
-  labs(x = "Accuracy", y = "Time steps", color = "Y labels") +
+  labs(x = "Time steps", y = "Accuracy", color = "Y labels") +
   geom_line(aes(y = Smooth, color = "Smooth")) +
   geom_line(aes(y = Filtered, color = "Filtered")) +
   geom_line(aes(y = Path, color = "Path")) +
   scale_x_continuous(breaks = accs_df$Time_steps)
+
+ggplot(data = accs_df_2, mapping = aes(x=Seed)) +
+  ylim(0, 1) +
+  xlim(1, 5) +
+  labs(x = "Seed", y = "Accuracy", color = "Y labels") +
+  geom_line(aes(y = Smooth, color = "Smooth")) +
+  geom_line(aes(y = Filtered, color = "Filtered")) +
+  geom_line(aes(y = Path, color = "Path")) +
+  scale_x_continuous(breaks = accs_df_2$Seed)
 ```
 ## Task 6
 *Is it true that the more observations you have the better you know where the robot is?*
-
-ACUUMULATED MEAN
 
 ```{r}
 sim <- simulationStepComputation(HMM, 300)
 smooth_ent <- apply(sim$smooth_dist, 2,entropy.empirical)
 filtered_ent <- apply(sim$filtered_dist, 2,entropy.empirical)
-rolling_mean_smooth <- numeric(300)
-rolling_mean_filtered <- numeric(300)
+accumulated_mean_smooth <- numeric(300)
+accumulated_mean_filtered <- numeric(300)
 for (i in 1:300) {
-  rolling_mean_smooth[i] <- mean(smooth_ent[1:i])
-  rolling_mean_filtered[i] <- mean(filtered_ent[1:i])
+  accumulated_mean_smooth[i] <- mean(smooth_ent[1:i])
+  accumulated_mean_filtered[i] <- mean(filtered_ent[1:i])
 }
-rolling_mean_df <- data.frame(t(rbind(rolling_mean_filtered, rolling_mean_smooth, time_steps =(1:300))))
-ggplot(data = rolling_mean_df, mapping = aes(x=time_steps)) +
+accumulated_mean_df <- data.frame(t(rbind(accumulated_mean_filtered, accumulated_mean_smooth, time_steps =(1:300))))
+ggplot(data = accumulated_mean_df, mapping = aes(x=time_steps)) +
   xlim(0, 300) +
   labs(x = "Time steps", y = "Entropy", color = "Y labels") +
   geom_line(aes(y = rolling_mean_smooth, color = "Smooth")) +
