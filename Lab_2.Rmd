@@ -1,0 +1,218 @@
+---
+title: "Lab_2"
+author: "David Gumpert Harryson"
+date: "9/19/2020"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+## Task description 
+*You are asked to model the behavior of a robot that walks around a ring. The ring is divided into 10 sectors. At any given time point, the robot is in one of the sectors and decides with equal probability to stay in that sector or move to the next sector. You do not have direct observation of the robot. However, the robot is equipped with a tracking device that you can access. The device is not very accurate though: If the robot is in the sector i, then the device will report that the robot is in the sectors [i - 2, i + 2] with equal probability.*
+
+
+
+```{r, echo=FALSE, out.height='50%', fig.align='center'}
+knitr::include_graphics("/Users/davidgumpert/Desktop/Advance Machine Learning/Lab 2/Markov_Meme.jpg")
+```
+```{r, configurations, echo=FALSE}
+set.seed(12345)
+rm(list = ls())
+library(HMM)
+library(entropy)
+```
+
+\newpage
+
+## Task 1
+*Build a hidden Markov model (HMM) for the scenario described in the task description.*
+
+As explained in the lectures, to build a HMM we need
+  1) An initial model
+  2) A emission model
+  3) A transition model
+The initial model will not be defined and by default a uniform distribution will be used by the initHMM function from the HMM library. As for the trasition and emission models I define matrices defining the probability of transition/emission in each sector based on the assignment description. 
+
+```{r}
+# 10 sectors --> 10 states to be defined and 10 symbols (the observable variables from the emission model)
+states = c(LETTERS[1:10])
+symbols = c("Ax", "Bx", "Cx", "Dx", "Ex", "Fx", "Gx", "Hx", "Ix", "Jx")
+
+# From the assignment description we know the robot stays in the same state or move to the next with equal probability. From this we can derive the following transition matrix for the 10 states.
+transitionMatrix <- t(matrix(data = c(.5,.5,0,0,0,0,0,0,0,0,
+                  0,.5,.5,0,0,0,0,0,0,0,
+                  0,0,.5,.5,0,0,0,0,0,0,
+                  0,0,0,.5,.5,0,0,0,0,0,
+                  0,0,0,0,.5,.5,0,0,0,0,
+                  0,0,0,0,0,.5,.5,0,0,0,
+                  0,0,0,0,0,0,.5,.5,0,0,
+                  0,0,0,0,0,0,0,.5,.5,0,
+                  0,0,0,0,0,0,0,0,.5,.5,
+                  .5,0,0,0,0,0,0,0,0,.5),
+                           nrow = length(states),
+                           ncol = length(symbols)))
+
+# The assignment description also states that when in sector i the emission model will report the true sector or +-2 sectors with equal probability resulting in the following emission matrix
+emissionMatrix <- matrix(data = c(.2,.2,.2,0,0,0,0,0,.2,.2,
+                .2,.2,.2,.2,0,0,0,0,0,.2,
+                .2,.2,.2,.2,.2,0,0,0,0,0,
+                0,.2,.2,.2,.2,.2,0,0,0,0,
+                0,0,.2,.2,.2,.2,.2,0,0,0,
+                0,0,0,.2,.2,.2,.2,.2,0,0,
+                0,0,0,0,.2,.2,.2,.2,.2,0,
+                0,0,0,0,0,.2,.2,.2,.2,.2,
+                .2,0,0,0,0,0,.2,.2,.2,.2,
+                .2,.2,0,0,0,0,0,.2,.2,.2),
+                         nrow = length(states),
+                         ncol = length(symbols))
+
+HMM <- initHMM(States = states, 
+               Symbols = symbols, 
+               emissionProbs = emissionMatrix, 
+               transProbs = transitionMatrix)
+
+print(HMM)
+```
+## Task 2
+*Simulate the HMM for 100 time steps*
+
+```{r}
+hmm_sim <- simHMM(HMM, 100)
+print(hmm_sim)
+```
+## Task 3
+*Discard the hidden states from the sample obtained above. Use the remaining observations to compute the filtered and smoothed probability distributions for each of the 100 time points. Compute also the most probable path.*
+
+```{r}
+# Function returning the most probable state given a probability vector describing the probability distribution over the 10 states in a specific time step
+mostProbState <- function(prob_vect) {
+  max_index <- which.max(prob_vect)
+  most_prob_state <- states[max_index]
+  return(most_prob_state)
+}
+
+# Using the posterior() function from the HMM library to compute the posterior probabilities of being in state X at time k given the observations simulated in task 2 and the constructed HMM. The Posterior function uses the Forward and Backward probabilities in its calculations as discussed in the lectures.
+smooth_dist <- posterior(HMM, hmm_sim$observation)
+smooth_most_prob <- apply(X = smooth_dist, MARGIN = 2, FUN = mostProbState)
+
+# Computing the filtered probability distribution with the forward function from the HMM library. Per recommendation using the exp and prob.table functions to get the normalized prob. dist. since the Forward function gives probabilities in log scale.
+filtered_dist <- exp(forward(HMM, hmm_sim$observation))
+filtered_dist_norm <- apply(X = filtered_dist, MARGIN = 2, FUN = prop.table)
+filtered_most_prob <- apply(X = filtered_dist_norm, MARGIN = 2, FUN = mostProbState)
+
+# Computing the most probable path with the viterbi algorithm
+most_prob_path <- viterbi(hmm = HMM, observation = hmm_sim$observation)
+
+```
+## Task 4
+*Compute the accuracy of the filtered and smoothed probability distributions, and of the most probable path. That is, compute the percentage of the true hidden states that are guessed by each method*
+
+```{r}
+# Function to determine the accuracy in the predicted states vs the true states from the HMM from the initHMM. Takes the predicted states and the true tates as in parameters and return a percentage of correctly classified states.  
+stateAcc <- function(pred_states, true_states) {
+  num_states <- length(pred_states)
+  acc_res <- rep(0, num_states)
+  for(i in 1:num_states) {
+    if(pred_states[i] == true_states[i]) {
+      acc_res[i] = 1
+    } else {
+      acc_res[i] = 0
+    }
+  }
+  correct_pred <- sum(acc_res)
+  pred_acc <- correct_pred/num_states
+  return(pred_acc)
+}
+
+# Smooth accuracy
+smooth_acc <- stateAcc(smooth_most_prob, hmm_sim$states)
+
+# Filtered accuracy
+filtered_acc <- stateAcc(filtered_most_prob, hmm_sim$states)
+
+# Mot probable path accuracy
+path_acc <- stateAcc(most_prob_path, hmm_sim$states)
+```
+## Task 5
+*Repeat the previous exercise with different simulated samples. In general, the smoothed distributions should be more accurate than the filtered distributions. Why? In general, the smoothed distributions should be more accurate than the most probable paths, too. Why?*
+```{r}
+# Function to calculate the Smooth, Filtered and Path accuracy given a HMM and a number of time steps. Also returns the probability distribution for both the Filtered and Smooth calculations. 
+simulationStepComputation <- function(hmm, time_steps) {
+    # Initializing the simulated HMM
+    HMM_simulation <- simHMM(hmm,time_steps)
+    
+    # Smooth (_new is added to the calculated variables to differ from the previous distribution and acc calculations made     in previous tasks).
+    smooth_dist_new <- posterior(HMM, HMM_simulation$observation)
+    smooth_most_prob_new <- apply(X = smooth_dist_new, MARGIN = 2, FUN = mostProbState)
+    smooth_acc_new <- stateAcc(smooth_most_prob_new, HMM_simulation$states)
+
+    # Filtered
+    filtered_dist_new <- exp(forward(HMM, HMM_simulation$observation))
+    filtered_dist_norm_new <- apply(X = filtered_dist_new, MARGIN = 2, FUN = prop.table)
+    filtered_most_prob_new <- apply(X = filtered_dist_norm_new, MARGIN = 2, FUN = mostProbState)
+    filtered_acc_new <- stateAcc(filtered_most_prob_new, HMM_simulation$states)
+
+    # Most probable path
+    most_prob_path_new <- viterbi(hmm = HMM, observation = HMM_simulation$observation)
+    path_acc_new <- stateAcc(most_prob_path_new, HMM_simulation$states)
+    
+    accuracy <- data.frame(Smooth = smooth_acc_new, Filtered = filtered_acc_new, Path = path_acc_new)
+    result <- list("accuracy" = accuracy,
+                "smooth_dist" = smooth_dist_new,
+                "filtered_dist" = filtered_dist_new)
+    return(result)
+}
+
+simmulated_samples = c(50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000)
+accs_df <- data.frame(Smooth=numeric(0), Filtered = numeric(0), Path = numeric(0))
+
+for(i in 1:length(simmulated_samples)) {
+  simulation_step <- simulationStepComputation(hmm = HMM, time_steps = simmulated_samples[i])
+  accs_df <- rbind(accs_df, simulation_step$accuracy)
+}
+
+library(ggplot2)
+accs_df <- cbind(Time_steps = simmulated_samples, accs_df)
+ggplot(data = accs_df, mapping = aes(x=Time_steps)) +
+  ylim(0, 1) +
+  xlim(50, 1000) +
+  labs(x = "Accuracy", y = "Time steps", color = "Y labels") +
+  geom_line(aes(y = Smooth, color = "Smooth")) +
+  geom_line(aes(y = Filtered, color = "Filtered")) +
+  geom_line(aes(y = Path, color = "Path")) +
+  scale_x_continuous(breaks = accs_df$Time_steps)
+```
+## Task 6
+*Is it true that the more observations you have the better you know where the robot is?*
+
+ACUUMULATED MEAN
+
+```{r}
+sim <- simulationStepComputation(HMM, 300)
+smooth_ent <- apply(sim$smooth_dist, 2,entropy.empirical)
+filtered_ent <- apply(sim$filtered_dist, 2,entropy.empirical)
+rolling_mean_smooth <- numeric(300)
+rolling_mean_filtered <- numeric(300)
+for (i in 1:300) {
+  rolling_mean_smooth[i] <- mean(smooth_ent[1:i])
+  rolling_mean_filtered[i] <- mean(filtered_ent[1:i])
+}
+rolling_mean_df <- data.frame(t(rbind(rolling_mean_filtered, rolling_mean_smooth, time_steps =(1:300))))
+ggplot(data = rolling_mean_df, mapping = aes(x=time_steps)) +
+  xlim(0, 300) +
+  labs(x = "Time steps", y = "Entropy", color = "Y labels") +
+  geom_line(aes(y = rolling_mean_smooth, color = "Smooth")) +
+  geom_line(aes(y = rolling_mean_filtered, color = "Filtered"))
+```
+## Task 7
+*Consider any of the samples above of length 100. Compute the probabilities of the hidden states for the time step 101.*
+
+This is calculated simply by looking at the filtered probability distribution of step 100 and multiplying by the transition matrix giving a prediction for state 101. To quote the report meme: "Babe, my life is a Markov chain. *"Given the present, I don't need the past to predict the future."* The present being the probability distributionin step 100. 
+```{r}
+state_100 <- filtered_dist_norm[,100]
+state_101 <- transitionMatrix %*% state_100
+print(state_100)
+```
