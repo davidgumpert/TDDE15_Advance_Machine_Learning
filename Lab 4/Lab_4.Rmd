@@ -1,0 +1,14 @@
+---
+title: "Lab 4 - Gaussian Processes"
+author: "David Gumpert Harryson"
+date: "10/16/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Exercise 1 - Implementing GP Regression
+*This first exercise will have you writing your own code for the Gaussian process regression model:*
+
+*You must implement Algorithm 2.1 on page 19 of Rasmussen and Willams’ book. The algo- rithm uses the Cholesky decomposition (chol in R) to attain numerical stability. Note that L in the algorithm is a lower triangular matrix, whereas the R function returns an upper triangular matrix. So, you need to transpose the output of the R function. In the algorithm, the notation A/b means the vector x that solves the equation Ax = b (see p. xvii in the book). This is implemented in R with the help of the function solve.*
